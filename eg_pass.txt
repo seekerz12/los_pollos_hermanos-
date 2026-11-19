@@ -1,0 +1,3 @@
+ username: "walter", password: "customer123"
+ username: "lyle", password: "staff123"
+ username: "gus", password: "manager123"
