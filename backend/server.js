@@ -90,12 +90,62 @@ app.get("/api/orders", authenticateToken, requireRole("STAFF", "MANAGER"), (req,
   res.json(db.getOrders());
 });
 
+// #new
+app.delete("/api/orders/:id", authenticateToken, requireRole("STAFF"), (req, res) => {
+  const order = db.getOrders().find((item) => item.order_id === Number(req.params.id));
+  if (!order) return res.status(404).json({ error: "Order not found." });
+  if (order.payment_status !== "UNPAID" || order.order_status === "COMPLETED") {
+    return res.status(409).json({ error: "Only unpaid, incomplete orders can be deleted." });
+  }
+
+  db.deleteOrder(order.order_id);
+  res.json({ order_id: order.order_id, deleted: true });
+});
+
 app.patch("/api/orders/:id/status", authenticateToken, requireRole("STAFF"), (req, res) => {
   const order = db.getOrders().find((o) => o.order_id === Number(req.params.id));
   if (!order) return res.status(404).json({ error: "Order not found." });
 
   if (req.body.order_status) order.order_status = req.body.order_status;
-  if (req.body.payment_status) order.payment_status = req.body.payment_status;
+  order.staff_id = req.user.user_id;
+
+  res.json(order);
+});
+
+// #new
+app.post("/api/orders/:id/payment", authenticateToken, requireRole("STAFF"), (req, res) => {
+  const order = db.getOrders().find((o) => o.order_id === Number(req.params.id));
+  if (!order) return res.status(404).json({ error: "Order not found." });
+  if (order.payment_status === "PAID") {
+    return res.status(409).json({ error: "This order has already been paid." });
+  }
+
+  const { payment_method, amount_received } = req.body || {};
+  if (!["CASH", "CARD"].includes(payment_method)) {
+    return res.status(400).json({ error: "Choose cash or card as the payment method." });
+  }
+  if (typeof amount_received !== "number" || !Number.isFinite(amount_received) || amount_received < 0) {
+    return res.status(400).json({ error: "Enter a valid amount received." });
+  }
+
+  const totalCents = Math.round(order.total_amount * 100);
+  const receivedCents = Math.round(amount_received * 100);
+  if (Math.abs(amount_received * 100 - receivedCents) > 0.000001) {
+    return res.status(400).json({ error: "Amount received must be in whole cents." });
+  }
+  if (payment_method === "CARD" && receivedCents !== totalCents) {
+    return res.status(400).json({ error: "Card payments must match the order total." });
+  }
+  if (payment_method === "CASH" && receivedCents < totalCents) {
+    return res.status(400).json({ error: "Amount received is less than the order total." });
+  }
+
+  order.payment_status = "PAID";
+  order.payment_method = payment_method;
+  order.amount_received = receivedCents / 100;
+  order.change_due = (receivedCents - totalCents) / 100;
+  order.paid_at = new Date().toISOString();
+  order.paid_by = req.user.full_name;
   order.staff_id = req.user.user_id;
 
   res.json(order);

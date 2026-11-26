@@ -28,7 +28,8 @@ let orders = [
     staff_id: 2,
     order_type: "TAKEAWAY",
     order_status: "PREPARING",
-    payment_status: "PAID",
+    // #new
+    payment_status: "UNPAID",
     total_amount: 16.49,
     created_at: new Date().toISOString(),
     items: [
@@ -52,6 +53,12 @@ module.exports = {
     return newUser;
   },
   getOrders: () => orders,
+  // #new
+  deleteOrder: (id) => {
+    const index = orders.findIndex((order) => order.order_id === Number(id));
+    if (index === -1) return null;
+    return orders.splice(index, 1)[0];
+  },
   addOrder: (order) => {
     const newOrder = { ...order, order_id: nextOrderId, order_number: `#LPH-${nextOrderId}` };
     nextOrderId++;
